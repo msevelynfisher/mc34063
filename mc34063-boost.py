@@ -49,46 +49,51 @@ R2 = (Vout / 1.25 - 1) * R1
 
 from math import log10, floor
 
-def sigfig(x, n):
-    return round(x, n - 1 - int(floor(log10(abs(x)))))
+# Represents a quantity with explicit units
+class Q:
+    def __init__(self, value, unit, sig = 3):
+        self.value = value
+        self.unit = unit
+        self.sig = sig
+    def fmt(self, pattern, prefix = ''):
+        # Q(CT, 'F').fmt('{value} {prefix}{unit}')
+        prefix_factor = {
+            'p': 1e-12, 'n': 1e-9, 'u': 1e-6, 'm': 1e-3,
+            '': 1e0, 'k': 1e3, 'M': 1e6, 'G': '1e9'
+        }[prefix]
+        value_adj = self.value / prefix_factor
+        places = self.sig - 1 - int(floor(log10(abs(value_adj))))
+        value_rounded = round(value_adj, places)
+        if places <= 0:
+            value_rounded = int(value_rounded)
+        result = pattern
+        result = result.replace('{value}', str(value_rounded))
+        result = result.replace('{prefix}', prefix)
+        result = result.replace('{unit}', self.unit)
+        return result
 
-def fmtKiCAD(value, prefix_value):
-    value_adj = sigfig(value / prefix_value, 3)
-    if abs(value_adj) >= 100:
-        value_adj = int(value_adj)
-    unit_prefix = {
-        1e-12: 'p',
-        1e-9: 'n',
-        1e-6: 'u',
-        1e-3: 'm',
-        1e0: '',
-        1e3: 'k',
-        1e6: 'M',
-        1e9: 'G'
-    }[prefix_value]
-    return str(value_adj) + unit_prefix
-
-def report(name, symbol, value, prefix_value, unit):
-    value_ki = fmtKiCAD(value, prefix_value)
+def report(name, symbol, value, unit, prefix = ''):
+    value_str = Q(value, unit).fmt('{value} {prefix}{unit}', prefix)
     print(name)
-    print(f'{symbol} = {value_ki}{unit}')
+    print(f'{symbol} = {value_str}')
     print()
 
-report('Timing Capacitance',  'CT',   CT,   1e-9, 'F')
-report('Peak Switch Current', 'Ipk',  Ipk,  1e-3, 'A')
-report('Input Resistance',    'Rsc',  Rsc,  1e0,  'Ω')
-report('Minimum Inductance',  'Lmin', Lmin, 1e-6, 'H')
-report('Output Capacitance',  'Co',   Co,   1e-6, 'F')
-report('Voltage Divider Top', 'R2',   R2,   1e3,  'Ω')
+report('Timing Capacitance',  'CT',   CT,   'F', 'n')
+report('Peak Switch Current', 'Ipk',  Ipk,  'A', 'm')
+report('Input Resistance',    'Rsc',  Rsc,  'Ω', '' )
+report('Minimum Inductance',  'Lmin', Lmin, 'H', 'u')
+report('Output Capacitance',  'Co',   Co,   'F', 'u')
+report('Voltage Divider Top', 'R2',   R2,   'Ω', 'k' )
 
 with open('kicad-mc34063-boost.sch', 'r') as f_in:
     with open(sch_out, 'w') as f_out:
         sch = f_in.read()
-        sch = sch.replace('{CT}',   fmtKiCAD(CT,   1e-9))
-        sch = sch.replace('{Rsc}',  fmtKiCAD(Rsc,  1e0))
-        sch = sch.replace('{Lmin}', fmtKiCAD(Lmin, 1e-6))
-        sch = sch.replace('{Co}',   fmtKiCAD(Co,   1e-6))
-        sch = sch.replace('{R1}',   fmtKiCAD(R1,   1e3))
-        sch = sch.replace('{R2}',   fmtKiCAD(R2,   1e3))
+        fmt = '{value}{prefix}'
+        sch = sch.replace('{CT}',   Q(CT,   'F').fmt(fmt, 'n'))
+        sch = sch.replace('{Rsc}',  Q(Rsc,  'Ω').fmt(fmt, '' ))
+        sch = sch.replace('{Lmin}', Q(Lmin, 'H').fmt(fmt, 'u'))
+        sch = sch.replace('{Co}',   Q(Co,   'F').fmt(fmt, 'u'))
+        sch = sch.replace('{R1}',   Q(R1,   'Ω').fmt(fmt, 'k'))
+        sch = sch.replace('{R2}',   Q(R2,   'Ω').fmt(fmt, 'k'))
         f_out.write(sch)
 print('KiCAD schematic written to:', sch_out)
